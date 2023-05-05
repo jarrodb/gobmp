@@ -38,11 +38,11 @@ steps:
             - CGO_ENABLED=0
             - GOOS=linux
           entrypoint: ./scripts/ci_entrypoint.sh
-          command: ["go", "build", "-buildvcs=false", "-mod=mod", "-a", "-o", "bin/$APP_NAME"]
+          command: ["go", "build", "-buildvcs=false", "-mod=mod", "-a", "-o", "bin/$APP_NAME", "./cmd/gobmp"]
 
   - label: ":docker: docker build and publish"
     key: "build"
-    depends_on: ["lint", "test", "gobuild"]
+    depends_on: ["test", "gobuild"]
     env:
       BUILDKITE_PLUGINS_ALWAYS_CLONE_FRESH: "true"
     commands: |
