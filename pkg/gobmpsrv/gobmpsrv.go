@@ -25,6 +25,7 @@ type bmpServer struct {
 	publisher       pub.Publisher
 	sourcePort      int
 	destinationPort int
+	heartbeat       int
 	incoming        net.Listener
 	stop            chan struct{}
 	passiveRouter   string
@@ -45,6 +46,7 @@ func (srv *bmpServer) Stop() {
 }
 
 func (srv *bmpServer) server() {
+	fmt.Printf("heartbeat: %d\n", srv.heartbeat)
 	// Create a channel for signaling retries from failed passive connections
 	retryChan := make(chan struct{})
 	retryCount := 0
@@ -168,7 +170,7 @@ func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int) {
 }
 
 // NewBMPServer instantiates a new instance of BMP Server
-func NewBMPServer(sPort, dPort int, intercept bool, p pub.Publisher, splitAF bool, passiveRouter string) (BMPServer, error) {
+func NewBMPServer(sPort, dPort int, intercept bool, p pub.Publisher, splitAF bool, passiveRouter string, heartbeat int) (BMPServer, error) {
 	incoming, err := net.Listen("tcp", fmt.Sprintf(":%d", sPort))
 	if err != nil {
 		glog.Errorf("fail to setup listener on port %d with error: %+v", sPort, err)
@@ -183,6 +185,7 @@ func NewBMPServer(sPort, dPort int, intercept bool, p pub.Publisher, splitAF boo
 		incoming:        incoming,
 		splitAF:         splitAF,
 		passiveRouter:   passiveRouter,
+		heartbeat:       heartbeat,
 	}
 
 	return &bmp, nil

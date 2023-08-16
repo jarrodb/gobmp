@@ -25,6 +25,7 @@ var (
 	dstPort    int
 	srcPort    int
 	perfPort   int
+	heartbeat  int
 	kafkaSrv   string
 	natsSrv    string
 	passiveRtr string
@@ -38,6 +39,7 @@ func init() {
 	runtime.GOMAXPROCS(1)
 	flag.IntVar(&srcPort, "source-port", 5000, "port exposed to outside")
 	flag.IntVar(&dstPort, "destination-port", 5050, "port openBMP is listening")
+	flag.IntVar(&heartbeat, "heartbeat-interval", 60, "heartbeat interval")
 	flag.StringVar(&kafkaSrv, "kafka-server", "", "URL to access Kafka server")
 	flag.StringVar(&natsSrv, "nats-server", "", "URL to access NATS server")
 	flag.StringVar(&passiveRtr, "passive-router", "", "Passive BMP router to connect outbound (<host>:<port>)")
@@ -100,7 +102,7 @@ func main() {
 		glog.Errorf("failed to parse to bool the value of the intercept flag with error: %+v", err)
 		os.Exit(1)
 	}
-	bmpSrv, err := gobmpsrv.NewBMPServer(srcPort, dstPort, interceptFlag, publisher, splitAFFlag, passiveRtr)
+	bmpSrv, err := gobmpsrv.NewBMPServer(srcPort, dstPort, interceptFlag, publisher, splitAFFlag, passiveRtr, heartbeat)
 	if err != nil {
 		glog.Errorf("failed to setup new gobmp server with error: %+v", err)
 		os.Exit(1)
