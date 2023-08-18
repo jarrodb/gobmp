@@ -46,7 +46,7 @@ func (srv *bmpServer) Stop() {
 }
 
 func (srv *bmpServer) server() {
-	fmt.Printf("heartbeat: %d\n", srv.heartbeat)
+	fmt.Printf("heartbeat: %d seconds\n", srv.heartbeat)
 	// Create a channel for signaling retries from failed passive connections
 	retryChan := make(chan struct{})
 	retryCount := 0
