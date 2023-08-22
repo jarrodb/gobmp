@@ -54,6 +54,7 @@ func (srv *bmpServer) server() {
 
 	// Create a channel for signaling passive connection tear down
 	stopChan := make(chan struct{})
+	doneChan := make(chan struct{})
 
 	// Create a channel for signaling retries from failed passive connections
 	retryChan := make(chan struct{})
@@ -61,7 +62,7 @@ func (srv *bmpServer) server() {
 
 	// Establish connection to passive router if specified
 	if srv.passiveRouter != "" {
-		go srv.passiveConnect(retryChan, retryCount, stopChan)
+		go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
 	}
 
 	// separate goroutine for handling incoming client connections
@@ -73,7 +74,7 @@ func (srv *bmpServer) server() {
 				continue
 			}
 			glog.V(5).Infof("client %+v accepted, calling bmpWorker", client.RemoteAddr())
-			go srv.bmpWorker(client, nil, nil)
+			go srv.bmpWorker(client, nil, nil, nil)
 		}
 	}()
 
@@ -84,24 +85,23 @@ func (srv *bmpServer) server() {
 			if srv.passiveRouter != "" {
 				glog.Infof("retrying connection to passive router")
 				retryCount++
-				go srv.passiveConnect(retryChan, retryCount, stopChan)
+				go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
 			}
 		case <-ticker.C:
 			fmt.Println("server: Sending stop signal to sub-goroutine...")
 			stopChan <- struct{}{}
-			time.Sleep(3 * time.Second)
+			<-doneChan
 			retryCount = 0
-			go srv.passiveConnect(retryChan, retryCount, stopChan)
+			fmt.Println("server: restart worker...")
+			go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
 		default:
 			// spinning
 		}
 	}
 }
 
-func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan struct{}) {
+func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan struct{}, doneChan chan struct{}) {
 	fmt.Println("worker: starting\n")
-	defer client.Close()
-	defer fmt.Println("worker: closed")
 	var server net.Conn
 	var err error
 	if srv.intercept {
@@ -180,9 +180,16 @@ WorkerLoop:
 		parserQueue <- fullMsg
 		*/
 	}
+
+	client.Close()
+	time.Sleep(3 * time.Second) // TODO: remove
+	if stopChan != nil {
+		doneChan <- struct{}{}
+	}
+	fmt.Println("worker: closed")
 }
 
-func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan struct{}) {
+func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan struct{}, doneChan chan struct{}) {
 	// Stop retrying after 10 attempts
 	if retryCount > 10 {
 		glog.Errorf("failed to connect to passive router after 10 retries")
@@ -202,7 +209,7 @@ func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, st
 	}
 
 	glog.Infof("connected to passive router %+v, calling bmpWorker", conn.RemoteAddr())
-	go srv.bmpWorker(conn, retryChan, stopChan)
+	go srv.bmpWorker(conn, retryChan, stopChan, doneChan)
 }
 
 // NewBMPServer instantiates a new instance of BMP Server
