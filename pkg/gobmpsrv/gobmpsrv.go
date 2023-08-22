@@ -50,8 +50,8 @@ func (srv *bmpServer) Stop() {
 }
 
 func (srv *bmpServer) server() {
-	fmt.Printf("server: heartbeat = %d seconds\n", srv.heartbeat)
-	fmt.Println("server: starting")
+	glog.Infof("server: heartbeat = %d seconds\n", srv.heartbeat)
+	glog.Infoln("server: starting")
 	// Create a ticker, ticker ticks upon heartbeat
 	ticker := time.NewTicker(time.Duration(srv.heartbeat) * time.Second)
 	defer ticker.Stop()
@@ -93,16 +93,16 @@ func (srv *bmpServer) server() {
 			}
 		case <-ticker.C:
 			if passiveConnUp == true {
-				fmt.Println("server: Sending stop signal to sub-goroutine...")
+				glog.Infoln("server: sending stop signal to sub-goroutine upon heartbeat.")
 				stopChan <- struct{}{}
 				<-doneChan
 				if srv.passiveRouter != "" {
-					fmt.Println("server: restart worker...")
+					glog.Infoln("server: restarting worker upon heartbeat.")
 					retryCount = 0
 					go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
 				}
 			} else {
-				fmt.Println("server: heartbeat when conn is down, do nothing")
+				glog.Infoln("server: heartbeat when conn is down, do nothing")
 			}
 		default:
 			// spinning
@@ -111,7 +111,7 @@ func (srv *bmpServer) server() {
 }
 
 func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan struct{}, doneChan chan struct{}) {
-	fmt.Println("worker: starting\n")
+	glog.Infoln("worker: starting")
 	var server net.Conn
 	var err error
 	if srv.intercept {
@@ -149,7 +149,7 @@ WorkerLoop:
 		if stopChan != nil {
 			select {
 			case <-stopChan:
-				fmt.Println("worker: STOP received, worker tearing down")
+				glog.Infoln("worker: heartbeat STOP received from server, worker tearing down")
 				break WorkerLoop
 			default:
 				// do nothing
@@ -203,7 +203,7 @@ WorkerLoop:
 		passiveConnUp = false
 	}
 
-	fmt.Println("worker: closed")
+	glog.Infoln("worker: closed")
 }
 
 func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan struct{}, doneChan chan struct{}) {
