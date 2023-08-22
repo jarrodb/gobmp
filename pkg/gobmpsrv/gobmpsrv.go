@@ -2,7 +2,7 @@ package gobmpsrv
 
 import (
 	"fmt"
-	//"io"
+	"io"
 	"net"
 	"time"
 
@@ -158,17 +158,14 @@ WorkerLoop:
 				// do nothing
 			}
 		}
-		//headerMsg := make([]byte, bmp.CommonHeaderLength)
 
-		/*
+		headerMsg := make([]byte, bmp.CommonHeaderLength)
 		if _, err := io.ReadAtLeast(client, headerMsg, bmp.CommonHeaderLength); err != nil {
-			fmt.Println("error!\n")
 			glog.Errorf("fail to read from client %+v with error: %+v", client.RemoteAddr(), err)
 			// Send a retry signal if channel is provided
 			if retryChan != nil {
 				retryChan <- struct{}{}
 			}
-			fmt.Println("blocked, not seeing this..\n")
 			return
 		}
 		// Recovering common header first
@@ -195,7 +192,6 @@ WorkerLoop:
 			}
 		}
 		parserQueue <- fullMsg
-		*/
 	}
 
 	err = client.Close()
@@ -203,7 +199,6 @@ WorkerLoop:
 			glog.Errorf("fail close client conn in bmpWorker: %+v", err)
 			return
 	}
-	time.Sleep(3 * time.Second) // TODO: remove
 
 	if stopChan != nil {
 		doneChan <- struct{}{}
