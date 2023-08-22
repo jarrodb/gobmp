@@ -96,9 +96,11 @@ func (srv *bmpServer) server() {
 				fmt.Println("server: Sending stop signal to sub-goroutine...")
 				stopChan <- struct{}{}
 				<-doneChan
-				retryCount = 0
-				fmt.Println("server: restart worker...")
-				go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
+				if srv.passiveRouter != "" {
+					fmt.Println("server: restart worker...")
+					retryCount = 0
+					go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
+				}
 			} else {
 				fmt.Println("server: heartbeat when conn is down, do nothing")
 			}
