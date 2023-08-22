@@ -46,14 +46,14 @@ func (srv *bmpServer) Stop() {
 }
 
 func (srv *bmpServer) server() {
-	fmt.Printf("heartbeat: %d seconds\n", srv.heartbeat)
-    fmt.Println("hello from server")
-    // Create a ticker, ticker ticks upon heartbeat
-    ticker := time.NewTicker(time.Duration(srv.heartbeat) * time.Second)
-    defer ticker.Stop()
+	fmt.Printf("server: heartbeat = %d seconds\n", srv.heartbeat)
+	fmt.Println("server: starting")
+	// Create a ticker, ticker ticks upon heartbeat
+	ticker := time.NewTicker(time.Duration(srv.heartbeat) * time.Second)
+	defer ticker.Stop()
 
-    // Create a channel for signaling passive connection tear down
-    stopChan := make(chan bool)
+	// Create a channel for signaling passive connection tear down
+	stopChan := make(chan bool)
 
 
 	// Create a channel for signaling retries from failed passive connections
@@ -62,7 +62,6 @@ func (srv *bmpServer) server() {
 
 	// Establish connection to passive router if specified
 	if srv.passiveRouter != "" {
-        fmt.Println("first call to connect")
 		go srv.passiveConnect(retryChan, retryCount, stopChan)
 	}
 
@@ -79,31 +78,30 @@ func (srv *bmpServer) server() {
 		}
 	}()
 
-    fmt.Println("here1")
 	// main goroutine for handling retrying passive connections
 	for {
-        select {
-        case <-ticker.C:
-            fmt.Println("Main goroutine: Sending stop signal to sub-goroutine...")
-            stopChan <- true
-            fmt.Println("Main goroutine: reset connection")
-            go srv.passiveConnect(retryChan, retryCount, stopChan)
-        case <-retryChan:
-            if srv.passiveRouter != "" {
-                glog.Infof("retrying connection to passive router")
-                retryCount++
-                go srv.passiveConnect(retryChan, retryCount, stopChan)
-            }
-        default:
-            // spinning
-        }
+		select {
+		case <-retryChan:
+			if srv.passiveRouter != "" {
+				glog.Infof("retrying connection to passive router")
+				retryCount++
+				go srv.passiveConnect(retryChan, retryCount, stopChan)
+			}
+		case <-ticker.C:
+			fmt.Println("server: Sending stop signal to sub-goroutine...")
+			stopChan <- true
+			time.Sleep(3 * time.Second)
+			go srv.passiveConnect(retryChan, retryCount, stopChan)
+		default:
+			// spinning
+		}
 	}
 }
 
 func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan bool) {
-    fmt.Println("hello from worker\n")
+	fmt.Println("worker: starting\n")
 	defer client.Close()
-    defer fmt.Println("worker closed")
+	defer fmt.Println("worker: closed")
 	var server net.Conn
 	var err error
 	if srv.intercept {
@@ -131,66 +129,57 @@ func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopCh
 		close(parsStop)
 		close(prodStop)
 	}()
-    fmt.Println("worker here 1\n")
 
 WorkerLoop:
 	for {
-        if stopChan != nil {
-            select {
-            case <-stopChan:
-                fmt.Println("breaking worker")
-                break WorkerLoop
-            default:
-                // do nothing
-                fmt.Println("worker here 2\n")
-            }
-        }
-        headerMsg := make([]byte, bmp.CommonHeaderLength)
+		if stopChan != nil {
+			select {
+			case <-stopChan:
+				fmt.Println("worker: STOP received, worker tearing down")
+				break WorkerLoop
+			default:
+				// do nothing
+			}
+		}
+		//headerMsg := make([]byte, bmp.CommonHeaderLength)
 
-        fmt.Println("worker here 3\n")
 		/*
-        if _, err := io.ReadAtLeast(client, headerMsg, bmp.CommonHeaderLength); err != nil {
-            fmt.Println("error!\n")
-            glog.Errorf("fail to read from client %+v with error: %+v", client.RemoteAddr(), err)
-            // Send a retry signal if channel is provided
-            if retryChan != nil {
-                retryChan <- struct{}{}
-            }
-            fmt.Println("blocked, not seeing this..\n")
-            return
-        }
-        fmt.Println("worker here 4\n")
-        // Recovering common header first
-        header, err := bmp.UnmarshalCommonHeader(headerMsg[:bmp.CommonHeaderLength])
-        if err != nil {
-            glog.Errorf("fail to recover BMP message Common Header with error: %+v", err)
-            continue
-        }
-        // Allocating space for the message body
-        msg := make([]byte, int(header.MessageLength)-bmp.CommonHeaderLength)
-        if _, err := io.ReadFull(client, msg); err != nil {
-            glog.Errorf("fail to read from client %+v with error: %+v", client.RemoteAddr(), err)
-            return
-        }
+		if _, err := io.ReadAtLeast(client, headerMsg, bmp.CommonHeaderLength); err != nil {
+			fmt.Println("error!\n")
+			glog.Errorf("fail to read from client %+v with error: %+v", client.RemoteAddr(), err)
+			// Send a retry signal if channel is provided
+			if retryChan != nil {
+				retryChan <- struct{}{}
+			}
+			fmt.Println("blocked, not seeing this..\n")
+			return
+		}
+		// Recovering common header first
+		header, err := bmp.UnmarshalCommonHeader(headerMsg[:bmp.CommonHeaderLength])
+		if err != nil {
+			glog.Errorf("fail to recover BMP message Common Header with error: %+v", err)
+			continue
+		}
+		// Allocating space for the message body
+		msg := make([]byte, int(header.MessageLength)-bmp.CommonHeaderLength)
+		if _, err := io.ReadFull(client, msg); err != nil {
+			glog.Errorf("fail to read from client %+v with error: %+v", client.RemoteAddr(), err)
+			return
+		}
+
+		fullMsg := make([]byte, int(header.MessageLength))
+		copy(fullMsg, headerMsg)
+		copy(fullMsg[bmp.CommonHeaderLength:], msg)
+		// Sending information to the server only in intercept mode
+		if srv.intercept {
+			if _, err := server.Write(fullMsg); err != nil {
+				glog.Errorf("fail to write to server %+v with error: %+v", server.RemoteAddr(), err)
+				return
+			}
+		}
+		parserQueue <- fullMsg
 		*/
-
-        header, _ := bmp.UnmarshalCommonHeader(headerMsg[:bmp.CommonHeaderLength])
-        // msg := make([]byte, int(header.MessageLength)-bmp.CommonHeaderLength)
-        msg := make([]byte, 0)
-
-        fullMsg := make([]byte, int(header.MessageLength))
-        copy(fullMsg, headerMsg)
-        copy(fullMsg[bmp.CommonHeaderLength:], msg)
-        // Sending information to the server only in intercept mode
-        if srv.intercept {
-            if _, err := server.Write(fullMsg); err != nil {
-                glog.Errorf("fail to write to server %+v with error: %+v", server.RemoteAddr(), err)
-                return
-            }
-        }
-        parserQueue <- fullMsg
 	}
-    fmt.Println("worker done\n")
 }
 
 func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan bool) {
