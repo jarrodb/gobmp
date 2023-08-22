@@ -91,6 +91,7 @@ func (srv *bmpServer) server() {
 			fmt.Println("server: Sending stop signal to sub-goroutine...")
 			stopChan <- true
 			time.Sleep(3 * time.Second)
+			retryCount = 0
 			go srv.passiveConnect(retryChan, retryCount, stopChan)
 		default:
 			// spinning
