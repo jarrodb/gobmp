@@ -13,9 +13,7 @@ import (
 	"github.com/sbezverk/gobmp/pkg/pub"
 )
 
-var (
-	passiveConnUp bool
-)
+var retryInterval = 30
 
 // BMPServer defines methods to manage BMP Server
 type BMPServer interface {
@@ -59,15 +57,17 @@ func (srv *bmpServer) server() {
 
 	// Create a channel for signaling passive connection tear down
 	stopChan := make(chan struct{})
-	doneChan := make(chan struct{})
 
 	// Create a channel for signaling retries from failed passive connections
 	retryChan := make(chan struct{})
-	retryCount := 0
+	retryCount := 1
 
 	// Establish connection to passive router if specified
 	if srv.passiveRouter != "" {
-		go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
+		go srv.passiveConnect(retryChan, retryCount, stopChan)
+	} else {
+		// Stop the ticker if no passive router is specified
+		ticker.Stop()
 	}
 
 	// separate goroutine for handling incoming client connections
@@ -79,7 +79,7 @@ func (srv *bmpServer) server() {
 				continue
 			}
 			glog.V(5).Infof("client %+v accepted, calling bmpWorker", client.RemoteAddr())
-			go srv.bmpWorker(client, nil, nil, nil)
+			go srv.bmpWorker(client, nil, nil)
 		}
 	}()
 
@@ -87,33 +87,30 @@ func (srv *bmpServer) server() {
 	for {
 		select {
 		case <-retryChan:
-			if srv.passiveRouter != "" {
-				glog.Infof("retrying connection to passive router")
-				retryCount++
-				go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
-			}
+			// retryChan is only utilized by passive connections
+			glog.Infof("retrying connection to passive router")
+
+			// Use a backoff timer to retry (retryInterval * retryCount)
+			time.Sleep(time.Duration(retryCount*retryInterval) * time.Second)
+
+			retryCount++
+
+			fmt.Println("retryCount : ", retryCount)
+			go srv.passiveConnect(retryChan, retryCount, stopChan)
 
 		// upon heartbeat, start passive connection
 		case <-ticker.C:
-			if passiveConnUp == true {
-				glog.Infoln("server: sending stop signal to sub-goroutine upon heartbeat.")
-				stopChan <- struct{}{}
-				<-doneChan
-				if srv.passiveRouter != "" {
-					glog.Infoln("server: restarting worker upon heartbeat.")
-					retryCount = 0
-					go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
-				}
-			} else {
-				glog.Infoln("server: heartbeat when conn is down, do nothing")
-			}
-		default:
-			// spinning
+			glog.Infoln("server: sending stop signal to sub-goroutine upon heartbeat.")
+
+			// reset the retry count upon successful heartbeat
+			retryCount = 1
+
+			stopChan <- struct{}{}
 		}
 	}
 }
 
-func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan struct{}, doneChan chan struct{}) {
+func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan struct{}) {
 	glog.Infoln("worker: starting")
 	var server net.Conn
 	var err error
@@ -143,22 +140,19 @@ func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopCh
 		close(prodStop)
 	}()
 
-	if stopChan != nil {
-		passiveConnUp = true
-	}
+	// go routine to handle stopChan
+	go func() {
+		<-stopChan
+		glog.Infoln("worker: received stop signal from server, closing client connection")
 
-WorkerLoop:
-	for {
-		if stopChan != nil {
-			select {
-			case <-stopChan:
-				glog.Infoln("worker: heartbeat STOP received from server, worker tearing down")
-				break WorkerLoop
-			default:
-				// do nothing
-			}
+		// close the underlying client to trigger the retryChan message
+		err = client.Close()
+		if err != nil {
+			glog.Errorf("fail close client conn in bmpWorker: %+v", err)
 		}
+	}()
 
+	for {
 		headerMsg := make([]byte, bmp.CommonHeaderLength)
 		if _, err := io.ReadAtLeast(client, headerMsg, bmp.CommonHeaderLength); err != nil {
 			glog.Errorf("fail to read from client %+v with error: %+v", client.RemoteAddr(), err)
@@ -166,6 +160,7 @@ WorkerLoop:
 			if retryChan != nil {
 				retryChan <- struct{}{}
 			}
+
 			return
 		}
 		// Recovering common header first
@@ -192,23 +187,11 @@ WorkerLoop:
 			}
 		}
 		parserQueue <- fullMsg
-	}
 
-	err = client.Close()
-	if err != nil {
-			glog.Errorf("fail close client conn in bmpWorker: %+v", err)
-			return
 	}
-
-	if stopChan != nil {
-		doneChan <- struct{}{}
-		passiveConnUp = false
-	}
-
-	glog.Infoln("worker: closed")
 }
 
-func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan struct{}, doneChan chan struct{}) {
+func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan struct{}) {
 	// Stop retrying after 10 attempts
 	if retryCount > 10 {
 		glog.Errorf("failed to connect to passive router after 10 retries")
@@ -222,13 +205,13 @@ func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, st
 		// Use a backoff timer to retry (30s * retryCount)
 		time.Sleep(time.Duration(retryCount*30) * time.Second)
 
-		// Signal tat the connection should be retried
+		// Signal that the connection should be retried
 		retryChan <- struct{}{}
 		return
 	}
 
 	glog.Infof("connected to passive router %+v, calling bmpWorker", conn.RemoteAddr())
-	go srv.bmpWorker(conn, retryChan, stopChan, doneChan)
+	go srv.bmpWorker(conn, retryChan, stopChan)
 }
 
 // NewBMPServer instantiates a new instance of BMP Server
