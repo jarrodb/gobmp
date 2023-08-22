@@ -198,7 +198,11 @@ WorkerLoop:
 		*/
 	}
 
-	client.Close()
+	err = client.Close()
+	if err != nil {
+			glog.Errorf("fail close client conn in bmpWorker: %+v", err)
+			return
+	}
 	time.Sleep(3 * time.Second) // TODO: remove
 
 	if stopChan != nil {
