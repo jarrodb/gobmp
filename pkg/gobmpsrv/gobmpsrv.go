@@ -13,6 +13,10 @@ import (
 	"github.com/sbezverk/gobmp/pkg/pub"
 )
 
+var (
+	passiveConnUp bool
+)
+
 // BMPServer defines methods to manage BMP Server
 type BMPServer interface {
 	Start()
@@ -88,12 +92,16 @@ func (srv *bmpServer) server() {
 				go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
 			}
 		case <-ticker.C:
-			fmt.Println("server: Sending stop signal to sub-goroutine...")
-			stopChan <- struct{}{}
-			<-doneChan
-			retryCount = 0
-			fmt.Println("server: restart worker...")
-			go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
+			if passiveConnUp == true {
+				fmt.Println("server: Sending stop signal to sub-goroutine...")
+				stopChan <- struct{}{}
+				<-doneChan
+				retryCount = 0
+				fmt.Println("server: restart worker...")
+				go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
+			} else {
+				fmt.Println("server: heartbeat when conn is down, do nothing")
+			}
 		default:
 			// spinning
 		}
@@ -129,6 +137,10 @@ func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopCh
 		close(parsStop)
 		close(prodStop)
 	}()
+
+	if stopChan != nil {
+		passiveConnUp = true
+	}
 
 WorkerLoop:
 	for {
@@ -183,9 +195,12 @@ WorkerLoop:
 
 	client.Close()
 	time.Sleep(3 * time.Second) // TODO: remove
+
 	if stopChan != nil {
 		doneChan <- struct{}{}
+		passiveConnUp = false
 	}
+
 	fmt.Println("worker: closed")
 }
 
