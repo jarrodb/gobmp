@@ -53,8 +53,7 @@ func (srv *bmpServer) server() {
 	defer ticker.Stop()
 
 	// Create a channel for signaling passive connection tear down
-	stopChan := make(chan bool)
-
+	stopChan := make(chan struct{})
 
 	// Create a channel for signaling retries from failed passive connections
 	retryChan := make(chan struct{})
@@ -89,7 +88,7 @@ func (srv *bmpServer) server() {
 			}
 		case <-ticker.C:
 			fmt.Println("server: Sending stop signal to sub-goroutine...")
-			stopChan <- true
+			stopChan <- struct{}{}
 			time.Sleep(3 * time.Second)
 			retryCount = 0
 			go srv.passiveConnect(retryChan, retryCount, stopChan)
@@ -99,7 +98,7 @@ func (srv *bmpServer) server() {
 	}
 }
 
-func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan bool) {
+func (srv *bmpServer) bmpWorker(client net.Conn, retryChan chan struct{}, stopChan chan struct{}) {
 	fmt.Println("worker: starting\n")
 	defer client.Close()
 	defer fmt.Println("worker: closed")
@@ -183,7 +182,7 @@ WorkerLoop:
 	}
 }
 
-func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan bool) {
+func (srv *bmpServer) passiveConnect(retryChan chan struct{}, retryCount int, stopChan chan struct{}) {
 	// Stop retrying after 10 attempts
 	if retryCount > 10 {
 		glog.Errorf("failed to connect to passive router after 10 retries")
