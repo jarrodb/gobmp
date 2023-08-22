@@ -52,6 +52,7 @@ func (srv *bmpServer) Stop() {
 func (srv *bmpServer) server() {
 	glog.Infof("server: heartbeat = %d seconds\n", srv.heartbeat)
 	glog.Infoln("server: starting")
+
 	// Create a ticker, ticker ticks upon heartbeat
 	ticker := time.NewTicker(time.Duration(srv.heartbeat) * time.Second)
 	defer ticker.Stop()
@@ -91,6 +92,8 @@ func (srv *bmpServer) server() {
 				retryCount++
 				go srv.passiveConnect(retryChan, retryCount, stopChan, doneChan)
 			}
+
+		// upon heartbeat, start passive connection
 		case <-ticker.C:
 			if passiveConnUp == true {
 				glog.Infoln("server: sending stop signal to sub-goroutine upon heartbeat.")
