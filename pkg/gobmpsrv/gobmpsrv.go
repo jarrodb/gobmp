@@ -48,7 +48,7 @@ func (srv *bmpServer) Stop() {
 }
 
 func (srv *bmpServer) server() {
-	// glog.Infof("server: heartbeat = %d seconds\n", srv.heartbeat)
+	glog.Infof("server: heartbeat = %d seconds\n", srv.heartbeat)
 	glog.Infoln("server: starting")
 
 	// Create a ticker, ticker ticks upon heartbeat
