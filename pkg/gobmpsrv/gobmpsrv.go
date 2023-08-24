@@ -95,6 +95,7 @@ func (srv *bmpServer) server() {
 
 		// upon heartbeat, start passive connection
 		case <-ticker.C:
+			glog.Infof("retry connection upon heartbeat")
 			// reset the retry count upon successful heartbeat
 			retryCount = 1
 
