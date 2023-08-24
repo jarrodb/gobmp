@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Start BMP
-	b, err = gobmpsrv.NewBMPServer(bmpPort, 0, false, p, false, "", 3600)
+	b, err = gobmpsrv.NewBMPServer(bmpPort, 0, false, p, false, "", time.Hour)
 	if err != nil {
 		panic(err)
 	}

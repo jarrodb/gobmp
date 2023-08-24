@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+    "time"
 
 	"net/http"
 	_ "net/http/pprof"
@@ -25,7 +26,7 @@ var (
 	dstPort    int
 	srcPort    int
 	perfPort   int
-	heartbeat  int
+	heartbeat  time.Duration
 	kafkaSrv   string
 	natsSrv    string
 	passiveRtr string
@@ -39,7 +40,7 @@ func init() {
 	runtime.GOMAXPROCS(1)
 	flag.IntVar(&srcPort, "source-port", 5000, "port exposed to outside")
 	flag.IntVar(&dstPort, "destination-port", 5050, "port openBMP is listening")
-	flag.IntVar(&heartbeat, "heartbeat-interval", 3600, "heartbeat interval in seconds")
+	flag.DurationVar(&heartbeat, "heartbeat-interval", time.Hour, "heartbeat interval in seconds")
 	flag.StringVar(&kafkaSrv, "kafka-server", "", "URL to access Kafka server")
 	flag.StringVar(&natsSrv, "nats-server", "", "URL to access NATS server")
 	flag.StringVar(&passiveRtr, "passive-router", "", "Passive BMP router to connect outbound (<host>:<port>)")
